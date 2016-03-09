@@ -50,20 +50,38 @@ def create_mnist_model(num_layers, n_hidden, w_regularizer, dropout_prob, init_s
     return model
 
 
+def evaluate_softmax(y_pred, y_actual):
+    max = np.amax(y_pred, 1)
+    is_max = y_pred == max.reshape((len(y_pred),1))
+    y_pred[np.invert(is_max)] = 0
+    y_pred[is_max] = 1
+    num_wrong = np.abs(y_pred - y_actual).sum()/2
+    return 1 - num_wrong/y_actual.shape[0]
+
+
 class FileRecord(Callback):
 
     def __init__(self, output_file):
         self.output = output_file
         self.counter = 1
+        self.tmp_str = ''
 
     def on_epoch_end(self, epoch, logs={}):
-        self.output.write(str(logs.get('loss')) + ',' +
-                            str(logs.get('val_loss')) + ',' +
-                          str(logs.get('acc')) + ',' +
-                          str(logs.get('val_acc')) + ',' +
-                          str(self.counter) + '\n')
+        self.output.write(self.tmp_str)
+        line = ''
+        num_empty = 0
+        for l in ['loss', 'val_loss', 'acc', 'val_acc']:
+            if l in logs:
+                line += str(logs.get(l)) + ','
+            else:
+                line += '{' + str(num_empty) + '},'
+                num_empty += 1
+        line += str(self.counter) + '\n'
+        self.tmp_str = line
         self.counter += 1
 
+    def set_acc(self, acc='', val_acc=''):
+        self.tmp_str = self.tmp_str.format(acc, val_acc)
 
 
 def print_full_pd(df):

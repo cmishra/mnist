@@ -23,12 +23,12 @@ x_train = x_train.reshape((x_train.shape[0], 1, x_train.shape[1], x_train.shape[
 print(x_train.shape)
 
 model = Sequential()
-model.add(building_residual_block('res1', (1, 28, 28), 32, (3, 3), subsample=(2,2), is_subsample=True))
-model.add(building_residual_block('res2', (1, 14, 14), 64, (3, 3), subsample=(2,2), is_subsample=True))
+model.add(building_residual_block('res1', (1, 28, 28), 4, (3, 3), subsample=(2,2), is_subsample=True))
+# model.add(building_residual_block('res2', (1, 14, 14), 64, (3, 3), subsample=(2,2), is_subsample=True))
 model.add(Flatten())
 # Note: Keras does automatic shape inference.
-model.add(Dense(256))
-model.add(Activation('relu'))
+# model.add(Dense(256))
+# model.add(Activation('relu'))
 
 model.add(Dense(10))
 model.add(Activation('softmax'))

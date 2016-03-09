@@ -60,6 +60,5 @@ for weight in model.get_weights():
 # model.fit(x_train, y_train, batch_size=256, nb_epoch=15,
 #           callbacks=[ModelCheckpoint(model_save_dir + model_save_filename)],
 #           validation_split=0.2, show_accuracy=True)
-print(np.isnan(model.predict(x_train)).any())
-print(np.isnan(model.predict(x_test)).any())
+print(np.isnan(model.predict(x_test)).sum())
 print(model.evaluate(x_test, y_test, show_accuracy=True))
