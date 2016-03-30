@@ -10,17 +10,10 @@ from keras.models import Graph, Sequential
 # from keras.layers.containers import Sequential
 from keras.optimizers import SGD
 import os
-from source import DataNormalizer, get_activations, Identity, FileRecord, evaluate_softmax
+from source import DataNormalizer, get_activations, Identity, FileRecord, evaluate_softmax, mnist
 
 # load data
-(x_train, y_train), (x_test, y_test) = mnist.load_data()
-num_classes = len(np.unique(y_test))
-y_train_1dim = y_train
-y_train = np_utils.to_categorical(y_train, num_classes)
-y_test = np_utils.to_categorical(y_test, num_classes)
-normalizer = DataNormalizer()
-normalizer.fit(x_train)
-x_train = normalizer.transform(x_train)
+(x_train, y_train), (x_test, y_test) = mnist()
 
 model = Graph()
 model.add_input(name='input', input_shape=(28,28))

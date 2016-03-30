@@ -1,12 +1,11 @@
-import numpy as np
-import pandas as pd
-from keras.callbacks import Callback
+import numpy as np, pandas as pd, math
+from keras.callbacks import Callback, ModelCheckpoint
 from keras.models import Sequential, Graph
 from keras.layers import Dense, Flatten, Dropout, Layer
 from theano import function, config
-
+from keras.utils import np_utils
+from keras.datasets.mnist import load_data
 import ggplot as gg
-
 
 # normalizes images featurewise
 class DataNormalizer:
@@ -22,7 +21,39 @@ class DataNormalizer:
         x[nans] = 0.0
         return x
 
-    
+
+class CvIterator():
+    def __init__(self, x_train, y_train, k, validation_split=0.2):
+        self.x_train = x_train
+        self.y_train = y_train
+        self.k = k
+        self.fold_indexes = []
+        self.validation_split = validation_split
+        self.shuffled_indexes = np.arange(x_train.shape[0])
+        np.random.shuffle(self.shuffled_indexes)
+
+        items_per_fold = math.floor(x_train.shape[0]/k)
+        for i in range(k):
+            self.fold_indexes.append(self.shuffled_indexes[i*items_per_fold:(i+1)*items_per_fold])
+
+    def __iter__(self):
+        self.i = 0
+        return self
+
+    def __next__(self):
+        if self.i >= self.k:
+            raise StopIteration
+        else:
+            test_indexes = self.fold_indexes[self.i]
+            train_indexes = np.setdiff1d(self.shuffled_indexes, test_indexes)
+            x_test = self.x_train[test_indexes]
+            y_test = self.y_train[test_indexes]
+            x_train = self.x_train[train_indexes]
+            y_train = self.y_train[train_indexes]
+            self.i += 1
+            return set_validation(x_train, y_train, self.validation_split), (x_test, y_test)
+
+
 # plot histories
 def plot_performance(hist1, hist2, metric, label1='hist1', label2='hist2'):
     from matplotlib import pyplot as plt
@@ -59,6 +90,19 @@ def evaluate_softmax(y_pred, y_actual):
     return 1 - num_wrong/y_actual.shape[0]
 
 
+class CvTestPerformance():
+    def __init__(self, unique_name, file='../data/CV_Output.csv'):
+        self.input = open(file, 'a')
+        self.name = unique_name
+        self.i = 0
+
+    def log(self, results):
+        assert len(results) == 2
+        self.input.write(self.name + str(self.i) +',' + str(results[0]) + ',' + str(results[1]) + '\n')
+        self.i += 1
+        self.input.flush()
+
+
 class FileRecord(Callback):
 
     def __init__(self, output_file):
@@ -83,6 +127,10 @@ class FileRecord(Callback):
     def set_acc(self, acc='', val_acc=''):
         self.tmp_str = self.tmp_str.format(acc, val_acc)
 
+    def __del__(self):
+        self.output.write(self.tmp_str)
+        self.output.close()
+
 
 def print_full_pd(df):
     pd.set_option('display.max_rows', len(df))
@@ -101,21 +149,6 @@ def get_activations(model, layer, X_batch):
 class Identity(Layer):
     def get_output(self, train):
         return self.get_input(train)
-
-
-class ResidualBlock(Layer):
-
-    def __init__(self, layers, block_prefix, input_shape, **kwargs):
-        self.main_path = layers
-        self.shortcut = Identity()
-        self.graph = Graph()
-        self.graph.add_input(name=block_prefix + 'input',
-                             input_shape=input_shape)
-
-
-        super(ResidualBlock, self).__init__(**kwargs)
-
-
 
 
 def matrix_to_df(matrix, names):
@@ -217,3 +250,51 @@ if __name__ == '__main__':
     sequences = [x, y]
     (x_train, y_train), (x_test, y_test) = test_train_split(sequences, 0.25)
 
+
+def mnist(for_conv=False):
+    (x_train, y_train), (x_test, y_test) = load_data()
+    x_train = x_train.reshape(x_train.shape[0], 1, 28, 28)
+    num_classes = len(np.unique(y_test))
+    y_train = np_utils.to_categorical(y_train, num_classes)
+    y_test = np_utils.to_categorical(y_test, num_classes)
+    normalizer = DataNormalizer()
+    normalizer.fit(x_train)
+    x_train = normalizer.transform(x_train)
+    return (x_train, y_train), (x_test, y_test)
+
+
+def set_validation(x_train, y_train, validation_split=0.2):
+    size_of_valid = validation_split*x_train.shape[0]
+    shuffled_indexes = np.arange(x_train.shape[0])
+    np.random.shuffle(shuffled_indexes)
+    x_train = x_train[shuffled_indexes]
+    y_train = y_train[shuffled_indexes]
+    x_valid = x_train[:size_of_valid]
+    y_valid = y_train[:size_of_valid]
+    x_train = x_train[size_of_valid:]
+    y_train = y_train[size_of_valid:]
+    return (x_train, y_train), (x_valid, y_valid)
+
+
+def graph_training_wrapper(model, x_train, y_train, x_valid, y_valid, nb_epoch=1000, \
+                           model_save_dir=None, model_save_filename=None, training_progress_record=None):
+    callbacks = []
+    if training_progress_record:
+        input = open(training_progress_record, 'w')
+        input.write('loss,val_loss,acc,val_acc,itr\n')
+        file_recorder = FileRecord(input)
+        callbacks.append(file_recorder)
+    if model_save_filename and model_save_dir:
+        callbacks.append(ModelCheckpoint(model_save_dir + model_save_filename))
+    for i in range(nb_epoch):
+        model.fit({'input': x_train, 'output':y_train}, nb_epoch=1, verbose=0,
+              validation_data={'input': x_valid, 'output':y_valid}, callbacks=callbacks)
+        acc = evaluate_softmax(model.predict({'input':x_train})['output'], y_train)
+        val_acc = evaluate_softmax(model.predict({'input':x_valid})['output'], y_valid)
+        if training_progress_record:
+            file_recorder.set_acc(acc, val_acc)
+            print(i, 'Accuracy on Train:', acc,
+                'Accuracy on Validation:', val_acc, sep='\t')
+        else:
+            print(i, 'Accuracy on Train:', acc,
+                'Accuracy on Validation:', val_acc, sep='\t')

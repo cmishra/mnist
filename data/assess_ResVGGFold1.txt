@@ -1,0 +1,4 @@
+loss,val_loss,acc,val_acc,itr
+loss,val_loss,acc,val_acc,itr
+loss,val_loss,acc,val_acc,itr
+loss,val_loss,acc,val_acc,itr
